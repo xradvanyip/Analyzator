@@ -70,17 +70,8 @@ BOOL CAnalyzatorApp::InitInstance()
 	// TODO: You should modify this string to be something appropriate
 	// such as the name of your company or organization
 	SetRegistryKey(_T("Local AppWizard-Generated Applications"));
-	handle = pcap_open_offline("C:\\Users\\acer\\Documents\\FIIT\\pks\\vzorky_pcap_na_analyzu\\trace-1.pcap",pcap_errbuf);
-	const u_char *packet;
-	int i;
-	CString pstr;
-	/*if (handle) do
-	{
-		pstr = _T("");
-		packet = pcap_next(handle,&pcap_header);
-		for (i=0;i < pcap_header.len;i++) pstr.AppendFormat(_T("%.2x "),packet[i]);
-		AfxMessageBox(pstr,MB_ICONINFORMATION);
-	} while (packet);*/
+	//handle = pcap_open_offline("C:\\Users\\acer\\Documents\\FIIT\\pks\\vzorky_pcap_na_analyzu\\trace-1.pcap",pcap_errbuf);
+	
 	CAnalyzatorDlg dlg;
 	m_pMainWnd = &dlg;
 	INT_PTR nResponse = dlg.DoModal();
@@ -111,3 +102,21 @@ BOOL CAnalyzatorApp::InitInstance()
 	return FALSE;
 }
 
+
+
+bool CAnalyzatorApp::OpenPCAPfile(CStringA path)
+{
+	handle = pcap_open_offline(path,pcap_errbuf);
+	if (!handle) return true;
+	/*const u_char *packet;
+	int i;
+	CString pstr;
+	if (handle)
+	{
+		pstr = _T("");
+		packet = pcap_next(handle,&pcap_header);
+		for (i=0;i < pcap_header.len;i++) pstr.AppendFormat(_T("%.2x "),packet[i]);
+		AfxMessageBox(pstr,MB_ICONINFORMATION);
+	}*/
+	return false;
+}

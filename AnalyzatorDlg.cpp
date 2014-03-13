@@ -18,18 +18,23 @@
 
 CAnalyzatorDlg::CAnalyzatorDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CAnalyzatorDlg::IDD, pParent)
+	, filedialog(NULL)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
+
+	filedialog = new CFileDialog(TRUE,NULL,NULL,NULL,_T("Tcpdump/libpcap files (*.pcap)|*.pcap|All Files|*||"));
 }
 
 void CAnalyzatorDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_FILENAME, m_filename);
 }
 
 BEGIN_MESSAGE_MAP(CAnalyzatorDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_OPENBUTTON, &CAnalyzatorDlg::OnBnClickedOpenbutton)
 END_MESSAGE_MAP()
 
 
@@ -85,3 +90,20 @@ HCURSOR CAnalyzatorDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+
+
+void CAnalyzatorDlg::OnOK(void)
+{
+}
+
+
+void CAnalyzatorDlg::OnBnClickedOpenbutton()
+{
+	filedialog->DoModal();
+	CStringA path(filedialog->GetPathName());
+	if (theApp.OpenPCAPfile(path)) AfxMessageBox(_T("Chyba pri otvoreni!"),MB_ICONERROR);
+	else
+	{
+		m_filename.SetWindowTextW(filedialog->GetFileName());
+	}
+}

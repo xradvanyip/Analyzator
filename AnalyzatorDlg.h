@@ -4,6 +4,7 @@
 
 #pragma once
 #include "analyzator.h"
+#include "afxwin.h"
 
 
 // CAnalyzatorDlg dialog
@@ -30,4 +31,10 @@ protected:
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 
+	virtual void OnOK(void);
+public:
+	afx_msg void OnBnClickedOpenbutton();
+private:
+	CFileDialog *filedialog;
+	CEdit m_filename;
 };

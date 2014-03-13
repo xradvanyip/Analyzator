@@ -25,13 +25,17 @@ public:
 // Overrides
 public:
 	virtual BOOL InitInstance();
+	bool OpenPCAPfile(CStringA path);
 
 // Implementation
 
 	DECLARE_MESSAGE_MAP()
+
+private:
 	pcap_t *handle;
 	char pcap_errbuf[PCAP_ERRBUF_SIZE];
 	struct pcap_pkthdr pcap_header;
+	
 };
 
 extern CAnalyzatorApp theApp;
