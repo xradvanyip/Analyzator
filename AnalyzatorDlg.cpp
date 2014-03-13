@@ -101,6 +101,7 @@ void CAnalyzatorDlg::OnBnClickedOpenbutton()
 {
 	filedialog->DoModal();
 	CStringA path(filedialog->GetPathName());
+	if (path.IsEmpty()) return;
 	if (theApp.OpenPCAPfile(path)) AfxMessageBox(_T("Chyba pri otvoreni!"),MB_ICONERROR);
 	else
 	{
