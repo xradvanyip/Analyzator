@@ -26,16 +26,17 @@ public:
 public:
 	virtual BOOL InitInstance();
 	bool OpenPCAPfile(CStringA path);
+	static UINT AnalyzeFrames(void *pParam);
 
 // Implementation
 
 	DECLARE_MESSAGE_MAP()
 
 private:
-	pcap_t *handle;
-	char pcap_errbuf[PCAP_ERRBUF_SIZE];
-	struct pcap_pkthdr pcap_header;
-	
+	static pcap_t *handle;
+	static char pcap_errbuf[PCAP_ERRBUF_SIZE];
+	static struct pcap_pkthdr pcap_header;
+	static CStringA FilePath;
 };
 
 extern CAnalyzatorApp theApp;

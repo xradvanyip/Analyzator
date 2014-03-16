@@ -17,24 +17,30 @@
 
 
 CAnalyzatorDlg::CAnalyzatorDlg(CWnd* pParent /*=NULL*/)
-	: CDialogEx(CAnalyzatorDlg::IDD, pParent)
+	: CDialog(CAnalyzatorDlg::IDD, pParent)
 	, filedialog(NULL)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
-	filedialog = new CFileDialog(TRUE,NULL,NULL,NULL,_T("Tcpdump/libpcap files (*.pcap)|*.pcap|All Files|*||"));
 }
 
 void CAnalyzatorDlg::DoDataExchange(CDataExchange* pDX)
 {
-	CDialogEx::DoDataExchange(pDX);
+	CDialog::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_FILENAME, m_filename);
+	DDX_Control(pDX, IDC_OUTPUT, m_output);
+	DDX_Control(pDX, IDC_PROTOCOLS, m_protocols);
+	DDX_Control(pDX, IDC_FRAMESBUTTON, m_fbutton);
+	DDX_Control(pDX, IDC_COMMBUTTON, m_commbutton);
 }
 
-BEGIN_MESSAGE_MAP(CAnalyzatorDlg, CDialogEx)
+BEGIN_MESSAGE_MAP(CAnalyzatorDlg, CDialog)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_OPENBUTTON, &CAnalyzatorDlg::OnBnClickedOpenbutton)
+	ON_BN_CLICKED(IDC_FRAMESBUTTON, &CAnalyzatorDlg::OnBnClickedFramesbutton)
+	ON_BN_CLICKED(IDC_COMMBUTTON, &CAnalyzatorDlg::OnBnClickedCommbutton)
+	ON_MESSAGE(WM_THREAD_MESSAGE, &CAnalyzatorDlg::OnThreadMessage)
 END_MESSAGE_MAP()
 
 
@@ -42,7 +48,7 @@ END_MESSAGE_MAP()
 
 BOOL CAnalyzatorDlg::OnInitDialog()
 {
-	CDialogEx::OnInitDialog();
+	CDialog::OnInitDialog();
 
 	// Set the icon for this dialog.  The framework does this automatically
 	//  when the application's main window is not a dialog
@@ -50,6 +56,10 @@ BOOL CAnalyzatorDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+	filedialog = new CFileDialog(TRUE,_T("pcap"),NULL,NULL,_T("Tcpdump/libpcap files (*.pcap)|*.pcap|All Files|*||"));
+	m_protocols.SetCurSel(0);
+	m_output.LimitText();
+	EnableControls(FALSE);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -79,7 +89,7 @@ void CAnalyzatorDlg::OnPaint()
 	}
 	else
 	{
-		CDialogEx::OnPaint();
+		CDialog::OnPaint();
 	}
 }
 
@@ -100,11 +110,71 @@ void CAnalyzatorDlg::OnOK(void)
 void CAnalyzatorDlg::OnBnClickedOpenbutton()
 {
 	filedialog->DoModal();
+	this->SetMenu(this->GetMenu());
 	CStringA path(filedialog->GetPathName());
 	if (path.IsEmpty()) return;
 	if (theApp.OpenPCAPfile(path)) AfxMessageBox(_T("Chyba pri otvoreni!"),MB_ICONERROR);
 	else
 	{
+		EnableControls(TRUE);
+		m_output.SetWindowTextW(_T(""));
 		m_filename.SetWindowTextW(filedialog->GetFileName());
 	}
+}
+
+
+void CAnalyzatorDlg::OnBnClickedFramesbutton()
+{
+	m_output.SetWindowTextW(_T(""));
+	EnableControls(FALSE);
+	AfxBeginThread(CAnalyzatorApp::AnalyzeFrames,this);
+}
+
+
+void CAnalyzatorDlg::OnBnClickedCommbutton()
+{
+	PrintToOutput(_T("00 FF 56 AB 00 FF 11 00 00"));
+	PrintToOutput(_T("11 11 20 00 FF 34 88 99 AA"));
+	CString s;
+	s.Format(_T("%d"),m_output.GetLimitText());
+	PrintToOutput(s);
+}
+
+
+void CAnalyzatorDlg::EnableControls(bool enabled)
+{
+	if (enabled) {
+		m_fbutton.EnableWindow(TRUE);
+		m_commbutton.EnableWindow(TRUE);
+		m_protocols.EnableWindow(TRUE);
+	}
+	else {
+		m_fbutton.EnableWindow(FALSE);
+		m_commbutton.EnableWindow(FALSE);
+		m_protocols.EnableWindow(FALSE);
+	}
+}
+
+
+afx_msg LRESULT CAnalyzatorDlg::OnThreadMessage(WPARAM wParam, LPARAM lParam)
+{
+	CString *line = (CString *)lParam;
+	CString line_to_print;
+	int length = m_output.GetWindowTextLengthW();
+	if (*line == "end_output") EnableControls(TRUE);
+	else {
+		line_to_print.Format(_T("%s\r\n"),*line);
+		m_output.SetSel(length,length);
+		m_output.ReplaceSel(line_to_print);
+	}
+	delete line;
+	
+	return 0;
+}
+
+
+void CAnalyzatorDlg::PrintToOutput(CString text)
+{
+	CString *textptr = new CString(text);
+	SendMessage(WM_THREAD_MESSAGE,0,(LPARAM)textptr);
 }

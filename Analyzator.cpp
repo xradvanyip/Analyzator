@@ -3,12 +3,18 @@
 //
 
 #include "stdafx.h"
+#include <afxtempl.h>
 #include "Analyzator.h"
 #include "AnalyzatorDlg.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+typedef struct ip_data {
+	byte ip1, ip2, ip3, ip4;
+	unsigned sent;
+} IP_DATA;
 
 
 // CAnalyzatorApp
@@ -21,7 +27,6 @@ END_MESSAGE_MAP()
 // CAnalyzatorApp construction
 
 CAnalyzatorApp::CAnalyzatorApp()
-	: handle(NULL)
 {
 	// support Restart Manager
 	m_dwRestartManagerSupportFlags = AFX_RESTART_MANAGER_SUPPORT_RESTART;
@@ -70,7 +75,6 @@ BOOL CAnalyzatorApp::InitInstance()
 	// TODO: You should modify this string to be something appropriate
 	// such as the name of your company or organization
 	SetRegistryKey(_T("Local AppWizard-Generated Applications"));
-	//handle = pcap_open_offline("C:\\Users\\acer\\Documents\\FIIT\\pks\\vzorky_pcap_na_analyzu\\trace-1.pcap",pcap_errbuf);
 	
 	CAnalyzatorDlg dlg;
 	m_pMainWnd = &dlg;
@@ -102,21 +106,110 @@ BOOL CAnalyzatorApp::InitInstance()
 	return FALSE;
 }
 
-
+CStringA CAnalyzatorApp::FilePath;
+char CAnalyzatorApp::pcap_errbuf[PCAP_ERRBUF_SIZE];
+pcap_t *CAnalyzatorApp::handle = NULL;
+struct pcap_pkthdr CAnalyzatorApp::pcap_header;
 
 bool CAnalyzatorApp::OpenPCAPfile(CStringA path)
 {
+	if (handle) pcap_close(handle);
 	handle = pcap_open_offline(path,pcap_errbuf);
 	if (!handle) return true;
-	/*const u_char *packet;
-	int i;
-	CString pstr;
-	if (handle)
-	{
-		pstr = _T("");
-		packet = pcap_next(handle,&pcap_header);
-		for (i=0;i < pcap_header.len;i++) pstr.AppendFormat(_T("%.2x "),packet[i]);
-		AfxMessageBox(pstr,MB_ICONINFORMATION);
-	}*/
+	FilePath = path;
 	return false;
+}
+
+
+UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
+{
+	CAnalyzatorDlg *pDlg = (CAnalyzatorDlg *) pParam;
+
+	const u_char *frame;
+	int frame_id = 0, i;
+	int length_on_wire;
+	CArray<IP_DATA, IP_DATA> ip;
+	bool found;
+	IP_DATA el;
+	int ip_index;
+	unsigned max_bytes_sent = 0;
+	CString print;
+	while ((frame = pcap_next(handle,&pcap_header)) != NULL)    // pre kazdy ramec
+	{
+		/* rámec ID */
+		print.Format(_T("rámec %d\r\n"),++frame_id);
+		
+		/* dåžka rámca poskytnutá paketovým drajverom */
+		print.AppendFormat(_T("dåžka rámca poskytnutá paketovým drajverom – %d B\r\n"),pcap_header.len);
+		
+		/* dåžka rámca prenášaného po médiu */
+		length_on_wire = pcap_header.len + 4;
+		if (length_on_wire < 64) length_on_wire = 64;
+		print.AppendFormat(_T("dåžka rámca prenášaného po médiu – %d B\r\n"),length_on_wire);
+		
+		/* typ ramca */
+		if (frame[12] >= 0x06) print.AppendFormat(_T("Ethernet II\r\n"));
+		else if ((frame[14] == 0xFF) && (frame[15] == 0xFF)) print.AppendFormat(_T("IEEE 802.3 - RAW\r\n"));
+		else if ((frame[14] == 0xAA) && (frame[15] == 0xAA) && (frame[16] == 0x03)) print.AppendFormat(_T("IEEE 802.3 - LLC - SNAP\r\n"));
+		else print.AppendFormat(_T("IEEE 802.3 - LLC\r\n"));
+
+		/* zdrojová MAC adresa */
+		print.AppendFormat(_T("Zdrojová MAC adresa: "));
+		for (i=6;i < 12;i++) print.AppendFormat(_T("%.2X "),frame[i]);
+		print.Delete(print.GetLength()-1);
+		
+		/* cie¾ová MAC adresa */
+		print.AppendFormat(_T("\r\nCie¾ová MAC adresa: "));
+		for (i=0;i < 6;i++) print.AppendFormat(_T("%.2X "),frame[i]);
+		print.Delete(print.GetLength()-1);
+		
+		/* vypis bajtov ramca */
+		print.AppendFormat(_T("\r\n"));
+		for (i=0;i < pcap_header.len;i++) {
+			print.AppendFormat(_T("%.2X"),frame[i]);
+			if (!((i+1) % 8) && ((i+1) % 16) && ((i+1) != pcap_header.len)) print.AppendFormat(_T("   "));
+			else if (!((i+1) % 16) && ((i+1) != pcap_header.len)) print.AppendFormat(_T("\r\n"));
+			else if ((i+1) != pcap_header.len) print.AppendChar(' ');
+		}
+		
+		/* prazdny riadok */
+		print.AppendFormat(_T("\r\n"));
+		
+		pDlg->PrintToOutput(print);
+
+		found = false;
+		if ((frame[12] == 0x08) && (frame[13] == 0x00) && ((frame[14] & 0xF0) == 0x40)) {
+			for (i=0;i < ip.GetCount();i++) {
+				if ((ip[i].ip1 == frame[26]) && (ip[i].ip2 == frame[27]) && (ip[i].ip3 == frame[28]) && (ip[i].ip4 == frame[29])) {
+					ip[i].sent += pcap_header.len;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				el.ip1 = frame[26];
+				el.ip2 = frame[27];
+				el.ip3 = frame[28];
+				el.ip4 = frame[29];
+				el.sent = pcap_header.len;
+				ip.Add(el);
+			}
+		}
+	}
+	print.Format(_T("IP adresy vysielajúcich uzlov:\r\n"));
+	for (i=0;i < ip.GetCount();i++) {
+		print.AppendFormat(_T("%d.%d.%d.%d\r\n"),ip[i].ip1,ip[i].ip2,ip[i].ip3,ip[i].ip4);
+		if (max_bytes_sent < ip[i].sent) {
+			max_bytes_sent = ip[i].sent;
+			ip_index = i;
+		}
+	}
+	print.AppendFormat(_T("\r\nAdresa uzla s najväèším poètom odvysielaných bajtov:\r\n"));
+	print.AppendFormat(_T("%d.%d.%d.%d    %u bajtov"),ip[ip_index].ip1,ip[ip_index].ip2,ip[ip_index].ip3,ip[ip_index].ip4,max_bytes_sent);
+	pDlg->PrintToOutput(print);
+	ip.RemoveAll();
+	pcap_close(handle);
+	handle = pcap_open_offline(FilePath,pcap_errbuf);
+	pDlg->PrintToOutput(_T("end_output"));
+	return 0;
 }

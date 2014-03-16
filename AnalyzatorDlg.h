@@ -6,9 +6,10 @@
 #include "analyzator.h"
 #include "afxwin.h"
 
+#define WM_THREAD_MESSAGE WM_APP+100
 
 // CAnalyzatorDlg dialog
-class CAnalyzatorDlg : public CDialogEx
+class CAnalyzatorDlg : public CDialog
 {
 // Construction
 public:
@@ -37,4 +38,16 @@ public:
 private:
 	CFileDialog *filedialog;
 	CEdit m_filename;
+	CEdit m_output;
+	CComboBox m_protocols;
+	CButton m_fbutton;
+	CButton m_commbutton;
+public:
+	afx_msg void OnBnClickedFramesbutton();
+	afx_msg void OnBnClickedCommbutton();
+	void EnableControls(bool enabled);
+protected:
+	afx_msg LRESULT OnThreadMessage(WPARAM wParam, LPARAM lParam);
+public:
+	void PrintToOutput(CString text);
 };
