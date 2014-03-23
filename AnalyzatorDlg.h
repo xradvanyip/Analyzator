@@ -36,6 +36,8 @@ protected:
 public:
 	afx_msg void OnBnClickedOpenbutton();
 private:
+	CFont OutputFont;
+	LOGFONT OutputLogFont;
 	CFileDialog *filedialog;
 	CEdit m_filename;
 	CEdit m_output;

@@ -14,6 +14,8 @@
 
 // CAnalyzatorDlg dialog
 
+THREAD_PARAM p1;
+
 
 
 CAnalyzatorDlg::CAnalyzatorDlg(CWnd* pParent /*=NULL*/)
@@ -56,6 +58,12 @@ BOOL CAnalyzatorDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+	m_output.GetFont()->GetLogFont(&OutputLogFont);
+	wcscpy(OutputLogFont.lfFaceName,_T("Courier New"));
+	OutputLogFont.lfHeight = -12;
+	OutputFont.CreateFontIndirectW(&OutputLogFont);
+	m_output.SetFont(&OutputFont);
+	
 	filedialog = new CFileDialog(TRUE,_T("pcap"),NULL,NULL,_T("Tcpdump/libpcap files (*.pcap)|*.pcap|All Files|*||"));
 	m_protocols.SetCurSel(0);
 	m_output.LimitText();
@@ -133,11 +141,40 @@ void CAnalyzatorDlg::OnBnClickedFramesbutton()
 
 void CAnalyzatorDlg::OnBnClickedCommbutton()
 {
-	PrintToOutput(_T("00 FF 56 AB 00 FF 11 00 00"));
-	PrintToOutput(_T("11 11 20 00 FF 34 88 99 AA"));
-	CString s;
-	s.Format(_T("%d"),m_output.GetLimitText());
-	PrintToOutput(s);
+	m_output.SetWindowTextW(_T(""));
+	EnableControls(FALSE);
+	p1.protocol = m_protocols.GetCurSel();
+	p1.pDlg = this;
+	
+	FILE *f;
+	bool error = 0;
+	f = fopen("ethernet2_protocols.txt","r");
+	if (!f) {
+		AfxMessageBox(_T("Súbor ethernet2_protocols.txt nebol nájdený!"),MB_ICONERROR);
+		error = 1;
+	}
+	else fclose(f);
+	f = fopen("ip_protocols.txt","r");
+	if (!f) {
+		AfxMessageBox(_T("Súbor ip_protocols.txt nebol nájdený!"),MB_ICONERROR);
+		error = 1;
+	}
+	else fclose(f);
+	f = fopen("ports.txt","r");
+	if (!f) {
+		AfxMessageBox(_T("Súbor ports.txt nebol nájdený!"),MB_ICONERROR);
+		error = 1;
+	}
+	else fclose(f);
+	f = fopen("icmp.txt","r");
+	if (!f) {
+		AfxMessageBox(_T("Súbor icmp.txt nebol nájdený!"),MB_ICONERROR);
+		error = 1;
+	}
+	else fclose(f);
+	
+	if (error) EnableControls(TRUE);
+	else AfxBeginThread(CAnalyzatorApp::AnalyzeCommunication,&p1);
 }
 
 

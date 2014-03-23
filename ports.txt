@@ -1,0 +1,35 @@
+TCP	7	echo
+TCP	19	chargen
+TCP	20	ftp-data
+TCP	21	ftp-control
+TCP	22	ssh
+TCP	23	telnet
+TCP	25	smtp
+TCP	53	domain
+TCP	79	finger
+TCP	80	http
+TCP	110	pop3
+TCP	111	sunrpc
+TCP	119	nntp
+TCP	139	netbios-ssn
+TCP	143	imap
+TCP	179	bgp
+TCP	389	ldap
+TCP	443	https
+TCP	445	microsoft-ds
+TCP	1080	socks
+UDP	7	echo
+UDP	19	chargen
+UDP	37	time
+UDP	53	domain
+UDP	67	bootps (DHCP)
+UDP	68	bootpc (DHCP)
+UDP	69	tftp
+UDP	137	netbios-ns
+UDP	138	netbios-dgm
+UDP	161	snmp
+UDP	162	snmp-trap
+UDP	500	isakmp
+UDP	514	syslog
+UDP	520	rip
+UDP	33434	traceroute

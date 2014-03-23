@@ -13,6 +13,11 @@
 #include <string.h>
 
 
+typedef struct thread_param {
+		int protocol;
+		CDialog *pDlg;
+	} THREAD_PARAM;
+
 // CAnalyzatorApp:
 // See Analyzator.cpp for the implementation of this class
 //
@@ -37,6 +42,8 @@ private:
 	static char pcap_errbuf[PCAP_ERRBUF_SIZE];
 	static struct pcap_pkthdr pcap_header;
 	static CStringA FilePath;
+public:
+	static UINT AnalyzeCommunication(void *pParam);
 };
 
 extern CAnalyzatorApp theApp;

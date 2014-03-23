@@ -213,3 +213,27 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 	pDlg->PrintToOutput(_T("end_output"));
 	return 0;
 }
+
+
+UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
+{
+	THREAD_PARAM *parameters = (THREAD_PARAM *) pParam;
+	CAnalyzatorDlg *pDlg = (CAnalyzatorDlg *) parameters->pDlg;
+	int prot = parameters->protocol;
+
+	const u_char *frame;
+	int frame_id = 0, i;
+	CString print;
+
+	if (prot == 1)
+	{
+		while ((frame = pcap_next(handle,&pcap_header)) != NULL)
+		{
+			pDlg->PrintToOutput(_T("http"));
+		}
+	}
+	pcap_close(handle);
+	handle = pcap_open_offline(FilePath,pcap_errbuf);
+	pDlg->PrintToOutput(_T("end_output"));
+	return 0;
+}
