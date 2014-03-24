@@ -18,6 +18,8 @@ typedef struct thread_param {
 		CDialog *pDlg;
 	} THREAD_PARAM;
 
+typedef enum {TCP, UDP} IP_PROT_TYPE;
+
 // CAnalyzatorApp:
 // See Analyzator.cpp for the implementation of this class
 //
@@ -32,6 +34,7 @@ public:
 	virtual BOOL InitInstance();
 	bool OpenPCAPfile(CStringA path);
 	static UINT AnalyzeFrames(void *pParam);
+	static UINT AnalyzeCommunication(void *pParam);
 
 // Implementation
 
@@ -42,8 +45,21 @@ private:
 	static char pcap_errbuf[PCAP_ERRBUF_SIZE];
 	static struct pcap_pkthdr pcap_header;
 	static CStringA FilePath;
+	FILE *f_eth2;
+	FILE *f_ip;
+	FILE *f_ports;
+	FILE *f_icmp;
 public:
-	static UINT AnalyzeCommunication(void *pParam);
+	CString CheckProtocolFiles(void);
+private:
+	unsigned int GetEth2ProtocolNum(char *Name);
+	unsigned int GetIPProtocolNum(char *Name);
+	IP_PROT_TYPE GetIPProtocolType(char *AppName);
+	unsigned int GetPortNumber(char *AppName);
+	CString GetICMPType(byte TypeNum);
+	byte GetUpperByte(unsigned int number);
+	byte GetLowerByte(unsigned int number);
+	unsigned int MergeBytes(byte upper, byte lower);
 };
 
 extern CAnalyzatorApp theApp;

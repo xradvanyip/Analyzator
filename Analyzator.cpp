@@ -27,6 +27,10 @@ END_MESSAGE_MAP()
 // CAnalyzatorApp construction
 
 CAnalyzatorApp::CAnalyzatorApp()
+	: f_eth2(NULL)
+	, f_ip(NULL)
+	, f_ports(NULL)
+	, f_icmp(NULL)
 {
 	// support Restart Manager
 	m_dwRestartManagerSupportFlags = AFX_RESTART_MANAGER_SUPPORT_RESTART;
@@ -76,6 +80,11 @@ BOOL CAnalyzatorApp::InitInstance()
 	// such as the name of your company or organization
 	SetRegistryKey(_T("Local AppWizard-Generated Applications"));
 	
+	f_eth2 = fopen("ethernet2_protocols.txt","r");
+	f_ip = fopen("ip_protocols.txt","r");
+	f_ports = fopen("ports.txt","r");
+	f_icmp = fopen("icmp.txt","r");
+
 	CAnalyzatorDlg dlg;
 	m_pMainWnd = &dlg;
 	INT_PTR nResponse = dlg.DoModal();
@@ -221,19 +230,139 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 	CAnalyzatorDlg *pDlg = (CAnalyzatorDlg *) parameters->pDlg;
 	int prot = parameters->protocol;
 
+	bool run_all = FALSE;
 	const u_char *frame;
 	int frame_id = 0, i;
 	CString print;
 
-	if (prot == 1)
+	if (prot == 0) {
+		run_all = TRUE;
+		prot = 1;
+	}
+	
+	while (TRUE)
 	{
 		while ((frame = pcap_next(handle,&pcap_header)) != NULL)
 		{
 			pDlg->PrintToOutput(_T("http"));
 		}
+		pcap_close(handle);
+		handle = pcap_open_offline(FilePath,pcap_errbuf);
+		if ((run_all) && (prot < 9)) prot++;
+		else break;
 	}
-	pcap_close(handle);
-	handle = pcap_open_offline(FilePath,pcap_errbuf);
 	pDlg->PrintToOutput(_T("end_output"));
 	return 0;
+}
+
+
+CString CAnalyzatorApp::CheckProtocolFiles(void)
+{
+	CString error(_T("Chyba pri otváraní:"));
+
+	if ((f_eth2) && (f_ip) && (f_ports) && (f_icmp)) return _T("");
+	if (!f_eth2) error.AppendFormat(_T("\r\nethernet2_protocols.txt"));
+	if (!f_ip) error.AppendFormat(_T("\r\nip_protocols.txt"));
+	if (!f_ports) error.AppendFormat(_T("\r\nports.txt"));
+	if (!f_icmp) error.AppendFormat(_T("\r\nicmp.txt"));
+
+	return error;
+}
+
+
+unsigned int CAnalyzatorApp::GetEth2ProtocolNum(char *Name)
+{
+	unsigned int num;
+	char tmp[100], scanstr[50];
+	
+	sprintf(scanstr,"%s\t%%X",Name);
+	while (fgets(tmp,100,f_eth2) != NULL) if (strstr(tmp,Name) != NULL) {
+		if (sscanf(tmp,scanstr,&num) > 0) break;
+	}
+	rewind(f_eth2);
+	
+	return num;
+}
+
+
+unsigned int CAnalyzatorApp::GetIPProtocolNum(char *Name)
+{
+	unsigned int num;
+	char tmp[100], scanstr[50];
+	
+	sprintf(scanstr,"%s\t%%u",Name);
+	while (fgets(tmp,100,f_ip) != NULL) if (strstr(tmp,Name) != NULL) {
+		if (sscanf(tmp,scanstr,&num) > 0) break;
+	}
+	rewind(f_ip);
+	
+	return num;
+}
+
+
+IP_PROT_TYPE CAnalyzatorApp::GetIPProtocolType(char *AppName)
+{
+	IP_PROT_TYPE type;
+	char *typestr;
+	char tmp[100], scanstr[50];
+	
+	sprintf(scanstr,"%s\t%%s",AppName);
+	while (fgets(tmp,100,f_ports) != NULL) if (strstr(tmp,AppName) != NULL) {
+		if (sscanf(tmp,scanstr,&typestr) > 0) break;
+	}
+	if (strcmp(typestr,"TCP") == 0) type = TCP;
+	else type = UDP;
+	rewind(f_ports);
+	
+	return type;
+}
+
+
+unsigned int CAnalyzatorApp::GetPortNumber(char *AppName)
+{
+	unsigned int num;
+	char tmp[100], scanstr[50];
+	
+	sprintf(scanstr,"%s\t%%*3c\t%%u",AppName);
+	while (fgets(tmp,100,f_ports) != NULL) if (strstr(tmp,AppName) != NULL) {
+		if (sscanf(tmp,scanstr,&num) > 0) break;
+	}
+	rewind(f_ports);
+	
+	return num;
+}
+
+
+CString CAnalyzatorApp::GetICMPType(byte TypeNum)
+{
+	CStringA type;
+	char tmp[100], scanstr[50];
+	char typestr[50];
+	
+	sprintf(scanstr,"%u\t%%[^\n]s",TypeNum);
+	while (fgets(tmp,100,f_icmp) != NULL) if (sscanf(tmp,scanstr,typestr) > 0) break;
+	rewind(f_icmp);
+	type.Format("%s",typestr);
+
+	return CString(type);
+}
+
+
+byte CAnalyzatorApp::GetUpperByte(unsigned int number)
+{
+	return number >> 8;
+}
+
+
+byte CAnalyzatorApp::GetLowerByte(unsigned int number)
+{
+	return number & 0xFF;
+}
+
+
+unsigned int CAnalyzatorApp::MergeBytes(byte upper, byte lower)
+{
+	unsigned int num = upper << 8;
+	num |= lower;
+	return num;
 }

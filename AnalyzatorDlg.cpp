@@ -146,34 +146,12 @@ void CAnalyzatorDlg::OnBnClickedCommbutton()
 	p1.protocol = m_protocols.GetCurSel();
 	p1.pDlg = this;
 	
-	FILE *f;
-	bool error = 0;
-	f = fopen("ethernet2_protocols.txt","r");
-	if (!f) {
-		AfxMessageBox(_T("Súbor ethernet2_protocols.txt nebol nájdený!"),MB_ICONERROR);
-		error = 1;
+	CString error = theApp.CheckProtocolFiles();
+		
+	if (error.IsEmpty() == FALSE) {
+		AfxMessageBox(error,MB_ICONERROR);
+		EnableControls(TRUE);
 	}
-	else fclose(f);
-	f = fopen("ip_protocols.txt","r");
-	if (!f) {
-		AfxMessageBox(_T("Súbor ip_protocols.txt nebol nájdený!"),MB_ICONERROR);
-		error = 1;
-	}
-	else fclose(f);
-	f = fopen("ports.txt","r");
-	if (!f) {
-		AfxMessageBox(_T("Súbor ports.txt nebol nájdený!"),MB_ICONERROR);
-		error = 1;
-	}
-	else fclose(f);
-	f = fopen("icmp.txt","r");
-	if (!f) {
-		AfxMessageBox(_T("Súbor icmp.txt nebol nájdený!"),MB_ICONERROR);
-		error = 1;
-	}
-	else fclose(f);
-	
-	if (error) EnableControls(TRUE);
 	else AfxBeginThread(CAnalyzatorApp::AnalyzeCommunication,&p1);
 }
 
