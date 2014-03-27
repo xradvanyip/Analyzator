@@ -16,6 +16,12 @@ typedef struct ip_data {
 	unsigned sent;
 } IP_DATA;
 
+typedef struct communication {
+	byte src_ip[4], dst_ip[4];
+	unsigned src_port, dst_port;
+	bool pre_verified, verified;
+} COMMUNICATION;
+
 
 // CAnalyzatorApp
 
@@ -190,7 +196,7 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 		if ((frame[12] == 0x08) && (frame[13] == 0x00) && ((frame[14] & 0xF0) == 0x40)) {
 			for (i=0;i < ip.GetCount();i++) {
 				if ((ip[i].ip1 == frame[26]) && (ip[i].ip2 == frame[27]) && (ip[i].ip3 == frame[28]) && (ip[i].ip4 == frame[29])) {
-					ip[i].sent += pcap_header.len;
+					ip[i].sent += length_on_wire;
 					found = true;
 					break;
 				}
@@ -200,7 +206,7 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 				el.ip2 = frame[27];
 				el.ip3 = frame[28];
 				el.ip4 = frame[29];
-				el.sent = pcap_header.len;
+				el.sent = length_on_wire;
 				ip.Add(el);
 			}
 		}
@@ -217,8 +223,7 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 	print.AppendFormat(_T("%d.%d.%d.%d    %u bajtov"),ip[ip_index].ip1,ip[ip_index].ip2,ip[ip_index].ip3,ip[ip_index].ip4,max_bytes_sent);
 	pDlg->PrintToOutput(print);
 	ip.RemoveAll();
-	pcap_close(handle);
-	handle = pcap_open_offline(FilePath,pcap_errbuf);
+	theApp.ReOpenPCAPfile();
 	pDlg->PrintToOutput(_T("end_output"));
 	return 0;
 }
@@ -233,6 +238,13 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 	bool run_all = FALSE;
 	const u_char *frame;
 	int frame_id = 0, i;
+	unsigned IP_prot_code = theApp.GetEth2ProtocolNum("IP");
+	int IP_header_length;
+	byte TCP_code = theApp.GetIPProtocolNum("TCP");
+	byte UDP_code = theApp.GetIPProtocolNum("UDP");
+	unsigned analyzed_port, curr_src_port, curr_dst_port;
+	IP_PROT_TYPE analyzed_seg_type;
+	CArray<COMMUNICATION, COMMUNICATION> endpoints;
 	CString print;
 
 	if (prot == 0) {
@@ -241,13 +253,63 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 	}
 	
 	while (TRUE)
-	{
-		while ((frame = pcap_next(handle,&pcap_header)) != NULL)
+	{	
+		if (prot < 8)
 		{
-			pDlg->PrintToOutput(_T("http"));
+			switch (prot) {
+			case 1:
+				analyzed_port = theApp.GetPortNumber("http");
+				analyzed_seg_type = theApp.GetIPProtocolType("http");
+				break;
+
+			case 2:
+				analyzed_port = theApp.GetPortNumber("https");
+				analyzed_seg_type = theApp.GetIPProtocolType("https");
+				break;
+
+			case 3:
+				analyzed_port = theApp.GetPortNumber("telnet");
+				analyzed_seg_type = theApp.GetIPProtocolType("telnet");
+				break;
+
+			case 4:
+				analyzed_port = theApp.GetPortNumber("ssh");
+				analyzed_seg_type = theApp.GetIPProtocolType("ssh");
+				break;
+
+			case 5:
+				analyzed_port = theApp.GetPortNumber("ftp-control");
+				analyzed_seg_type = theApp.GetIPProtocolType("ftp-control");
+				break;
+
+			case 6:
+				analyzed_port = theApp.GetPortNumber("ftp-data");
+				analyzed_seg_type = theApp.GetIPProtocolType("ftp-data");
+				break;
+
+			case 7:
+				analyzed_port = theApp.GetPortNumber("tftp");
+				analyzed_seg_type = theApp.GetIPProtocolType("tftp");
+				break;
+			}
+			
+			if (analyzed_seg_type == TCP) {
+				while ((frame = pcap_next(handle,&pcap_header)) != NULL)
+				{
+					frame_id++;
+					if ((frame[12] == theApp.GetUpperByte(IP_prot_code)) && (frame[13] == theApp.GetLowerByte(IP_prot_code)) && ((frame[14] & 0xF0) == 0x40)) {
+						IP_header_length = (frame[14] & 0x0F) * 4;
+						curr_src_port = theApp.MergeBytes(frame[14+IP_header_length],frame[15+IP_header_length]);
+						curr_dst_port = theApp.MergeBytes(frame[16+IP_header_length],frame[17+IP_header_length]);
+						
+					}
+				}
+			}
+			if (analyzed_seg_type == UDP) {
+				
+			}
 		}
-		pcap_close(handle);
-		handle = pcap_open_offline(FilePath,pcap_errbuf);
+		theApp.ReOpenPCAPfile();
 		if ((run_all) && (prot < 9)) prot++;
 		else break;
 	}
@@ -303,7 +365,7 @@ unsigned int CAnalyzatorApp::GetIPProtocolNum(char *Name)
 IP_PROT_TYPE CAnalyzatorApp::GetIPProtocolType(char *AppName)
 {
 	IP_PROT_TYPE type;
-	char *typestr;
+	char typestr[5];
 	char tmp[100], scanstr[50];
 	
 	sprintf(scanstr,"%s\t%%s",AppName);
@@ -365,4 +427,11 @@ unsigned int CAnalyzatorApp::MergeBytes(byte upper, byte lower)
 	unsigned int num = upper << 8;
 	num |= lower;
 	return num;
+}
+
+
+void CAnalyzatorApp::ReOpenPCAPfile(void)
+{
+	if (handle) pcap_close(handle);
+	handle = pcap_open_offline(FilePath,pcap_errbuf);
 }

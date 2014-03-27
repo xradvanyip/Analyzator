@@ -33,8 +33,10 @@ public:
 public:
 	virtual BOOL InitInstance();
 	bool OpenPCAPfile(CStringA path);
+	void ReOpenPCAPfile(void);
 	static UINT AnalyzeFrames(void *pParam);
 	static UINT AnalyzeCommunication(void *pParam);
+	CString CheckProtocolFiles(void);
 
 // Implementation
 
@@ -49,9 +51,6 @@ private:
 	FILE *f_ip;
 	FILE *f_ports;
 	FILE *f_icmp;
-public:
-	CString CheckProtocolFiles(void);
-private:
 	unsigned int GetEth2ProtocolNum(char *Name);
 	unsigned int GetIPProtocolNum(char *Name);
 	IP_PROT_TYPE GetIPProtocolType(char *AppName);

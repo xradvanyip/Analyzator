@@ -1,6 +1,6 @@
 0	Echo reply
 3	Destination unreachable
-4	Source	quench
+4	Source quench
 5	Redirect
 6	Alternate host address
 8	Echo request
