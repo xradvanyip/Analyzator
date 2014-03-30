@@ -13,6 +13,25 @@
 #include <string.h>
 
 
+#define ETH2_HDR_LEN 14
+
+typedef struct ip_data {
+	byte ip1, ip2, ip3, ip4;
+	unsigned sent;
+} IP_DATA;
+
+typedef struct communication {
+	byte src_ip[4], dst_ip[4];
+	unsigned src_port, dst_port;
+	unsigned start_frame_id, end_frame_id, frames_count;
+	bool start_pre_verified, start_verified;
+	bool end_init, end_pre_verified, end_verified, reversed_end;
+} COMMUNICATION;
+
+typedef struct frame_len_count {
+	unsigned from, to, count;
+} FRAME_LEN_COUNT;
+
 typedef struct thread_param {
 		int protocol;
 		CDialog *pDlg;
@@ -37,6 +56,17 @@ public:
 	static UINT AnalyzeFrames(void *pParam);
 	static UINT AnalyzeCommunication(void *pParam);
 	CString CheckProtocolFiles(void);
+	static bool IsACK(byte b);
+	static bool HaveACK(byte b);
+	static bool HaveRST(byte b);
+	static bool IsSYN(byte b);
+	static bool HaveSYN(byte b);
+	static bool IsFIN(byte b);
+	static bool HaveFIN(byte b);
+	static bool IsSYNandACK(byte b);
+	static bool IsFINandACK(byte b);
+	bool CmpCommWithFrame(COMMUNICATION comm, const u_char *frame, bool reverse = false);
+	void PrintFrame(const u_char *frame, CString *print, bool print_flags = false);
 
 // Implementation
 
@@ -56,9 +86,9 @@ private:
 	IP_PROT_TYPE GetIPProtocolType(char *AppName);
 	unsigned int GetPortNumber(char *AppName);
 	CString GetICMPType(byte TypeNum);
-	byte GetUpperByte(unsigned int number);
-	byte GetLowerByte(unsigned int number);
-	unsigned int MergeBytes(byte upper, byte lower);
+	static byte GetUpperByte(unsigned int number);
+	static byte GetLowerByte(unsigned int number);
+	static unsigned int MergeBytes(byte upper, byte lower);
 };
 
 extern CAnalyzatorApp theApp;

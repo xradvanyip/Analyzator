@@ -11,16 +11,6 @@
 #define new DEBUG_NEW
 #endif
 
-typedef struct ip_data {
-	byte ip1, ip2, ip3, ip4;
-	unsigned sent;
-} IP_DATA;
-
-typedef struct communication {
-	byte src_ip[4], dst_ip[4];
-	unsigned src_port, dst_port;
-	bool pre_verified, verified;
-} COMMUNICATION;
 
 
 // CAnalyzatorApp
@@ -154,44 +144,18 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 		/* rámec ID */
 		print.Format(_T("rámec %d\r\n"),++frame_id);
 		
-		/* dåžka rámca poskytnutá paketovým drajverom */
-		print.AppendFormat(_T("dåžka rámca poskytnutá paketovým drajverom – %d B\r\n"),pcap_header.len);
-		
-		/* dåžka rámca prenášaného po médiu */
-		length_on_wire = pcap_header.len + 4;
-		if (length_on_wire < 64) length_on_wire = 64;
-		print.AppendFormat(_T("dåžka rámca prenášaného po médiu – %d B\r\n"),length_on_wire);
-		
-		/* typ ramca */
-		if (frame[12] >= 0x06) print.AppendFormat(_T("Ethernet II\r\n"));
-		else if ((frame[14] == 0xFF) && (frame[15] == 0xFF)) print.AppendFormat(_T("IEEE 802.3 - RAW\r\n"));
-		else if ((frame[14] == 0xAA) && (frame[15] == 0xAA) && (frame[16] == 0x03)) print.AppendFormat(_T("IEEE 802.3 - LLC - SNAP\r\n"));
-		else print.AppendFormat(_T("IEEE 802.3 - LLC\r\n"));
-
-		/* zdrojová MAC adresa */
-		print.AppendFormat(_T("Zdrojová MAC adresa: "));
-		for (i=6;i < 12;i++) print.AppendFormat(_T("%.2X "),frame[i]);
-		print.Delete(print.GetLength()-1);
-		
-		/* cie¾ová MAC adresa */
-		print.AppendFormat(_T("\r\nCie¾ová MAC adresa: "));
-		for (i=0;i < 6;i++) print.AppendFormat(_T("%.2X "),frame[i]);
-		print.Delete(print.GetLength()-1);
-		
-		/* vypis bajtov ramca */
-		print.AppendFormat(_T("\r\n"));
-		for (i=0;i < pcap_header.len;i++) {
-			print.AppendFormat(_T("%.2X"),frame[i]);
-			if (!((i+1) % 8) && ((i+1) % 16) && ((i+1) != pcap_header.len)) print.AppendFormat(_T("   "));
-			else if (!((i+1) % 16) && ((i+1) != pcap_header.len)) print.AppendFormat(_T("\r\n"));
-			else if ((i+1) != pcap_header.len) print.AppendChar(' ');
-		}
+		/* vypis ramca */
+		theApp.PrintFrame(frame,&print);
 		
 		/* prazdny riadok */
 		print.AppendFormat(_T("\r\n"));
 		
 		pDlg->PrintToOutput(print);
 
+		/* dåžka rámca prenášaného po médiu */
+		length_on_wire = pcap_header.len + 4;
+		if (length_on_wire < 64) length_on_wire = 64;
+		
 		found = false;
 		if ((frame[12] == 0x08) && (frame[13] == 0x00) && ((frame[14] & 0xF0) == 0x40)) {
 			for (i=0;i < ip.GetCount();i++) {
@@ -235,18 +199,24 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 	CAnalyzatorDlg *pDlg = (CAnalyzatorDlg *) parameters->pDlg;
 	int prot = parameters->protocol;
 
+	char type[][15] = {"all", "http", "https", "telnet", "ssh", "ftp-control", "ftp-data", "tftp", "icmp", "arp"};
 	bool run_all = FALSE;
 	const u_char *frame;
-	int frame_id = 0, i;
+	int c_index, complete_c_id, uncomplete_c_id, i;
 	unsigned IP_prot_code = theApp.GetEth2ProtocolNum("IP");
-	int IP_header_length;
+	int IP_header_length, flags_i;
 	byte TCP_code = theApp.GetIPProtocolNum("TCP");
 	byte UDP_code = theApp.GetIPProtocolNum("UDP");
-	unsigned analyzed_port, curr_src_port, curr_dst_port;
+	unsigned frame_id = 0, analyzed_port, curr_src_port, curr_dst_port;
 	IP_PROT_TYPE analyzed_seg_type;
-	CArray<COMMUNICATION, COMMUNICATION> endpoints;
+	COMMUNICATION current_communication;
+	CArray<COMMUNICATION, COMMUNICATION> comm_list;
+	int found;
+	FRAME_LEN_COUNT fcount;
+	CArray<FRAME_LEN_COUNT, FRAME_LEN_COUNT> lengths_list;
 	CString print;
 
+	// ak budu analyzovane vsetky typy komunikacii
 	if (prot == 0) {
 		run_all = TRUE;
 		prot = 1;
@@ -254,63 +224,292 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 	
 	while (TRUE)
 	{	
-		if (prot < 8)
+		print.Empty();
+		if (prot < 8)  //ak TCP alebo UDP
 		{
-			switch (prot) {
-			case 1:
-				analyzed_port = theApp.GetPortNumber("http");
-				analyzed_seg_type = theApp.GetIPProtocolType("http");
-				break;
-
-			case 2:
-				analyzed_port = theApp.GetPortNumber("https");
-				analyzed_seg_type = theApp.GetIPProtocolType("https");
-				break;
-
-			case 3:
-				analyzed_port = theApp.GetPortNumber("telnet");
-				analyzed_seg_type = theApp.GetIPProtocolType("telnet");
-				break;
-
-			case 4:
-				analyzed_port = theApp.GetPortNumber("ssh");
-				analyzed_seg_type = theApp.GetIPProtocolType("ssh");
-				break;
-
-			case 5:
-				analyzed_port = theApp.GetPortNumber("ftp-control");
-				analyzed_seg_type = theApp.GetIPProtocolType("ftp-control");
-				break;
-
-			case 6:
-				analyzed_port = theApp.GetPortNumber("ftp-data");
-				analyzed_seg_type = theApp.GetIPProtocolType("ftp-data");
-				break;
-
-			case 7:
-				analyzed_port = theApp.GetPortNumber("tftp");
-				analyzed_seg_type = theApp.GetIPProtocolType("tftp");
-				break;
-			}
+			analyzed_port = theApp.GetPortNumber(type[prot]);    //nacitanie cisla portu zo suboru
+			analyzed_seg_type = theApp.GetIPProtocolType(type[prot]);    //nacitanie typu segmentu zo suboru
 			
+			// pre komunikacie so spojenim
 			if (analyzed_seg_type == TCP) {
 				while ((frame = pcap_next(handle,&pcap_header)) != NULL)
 				{
 					frame_id++;
-					if ((frame[12] == theApp.GetUpperByte(IP_prot_code)) && (frame[13] == theApp.GetLowerByte(IP_prot_code)) && ((frame[14] & 0xF0) == 0x40)) {
+					// ak ide o IPv4
+					if ((frame[12] == GetUpperByte(IP_prot_code)) && (frame[13] == GetLowerByte(IP_prot_code)) && ((frame[14] & 0xF0) == 0x40)) {
 						IP_header_length = (frame[14] & 0x0F) * 4;
-						curr_src_port = theApp.MergeBytes(frame[14+IP_header_length],frame[15+IP_header_length]);
-						curr_dst_port = theApp.MergeBytes(frame[16+IP_header_length],frame[17+IP_header_length]);
+						flags_i = ETH2_HDR_LEN+IP_header_length+13;
+						curr_src_port = MergeBytes(frame[ETH2_HDR_LEN+IP_header_length],frame[ETH2_HDR_LEN+IP_header_length+1]);
+						curr_dst_port = MergeBytes(frame[ETH2_HDR_LEN+IP_header_length+2],frame[ETH2_HDR_LEN+IP_header_length+3]);
+						if ((curr_src_port != analyzed_port) && (curr_dst_port != analyzed_port)) continue;
+						found = 0;
+
+						for (i=0;i < comm_list.GetCount();i++)
+							if (theApp.CmpCommWithFrame(comm_list[i],frame)) {
+								found = 1;
+								c_index = i;
+								if (!comm_list[i].end_verified) {
+									comm_list[i].frames_count++;
+									comm_list[i].end_frame_id = frame_id;
+								}
+								break;
+							}
+							else if (theApp.CmpCommWithFrame(comm_list[i],frame,true)) {
+								found = 2;
+								c_index = i;
+								if (!comm_list[i].end_verified) {
+									comm_list[i].frames_count++;
+									comm_list[i].end_frame_id = frame_id;
+								}
+								break;
+							}
 						
+						/* ak SYN=1 a ACK=0 */
+						if ((IsSYN(frame[flags_i])) && ((!found) || (!comm_list[c_index].end_verified))) {
+							current_communication.src_ip[0] = frame[26];
+							current_communication.src_ip[1] = frame[27];
+							current_communication.src_ip[2] = frame[28];
+							current_communication.src_ip[3] = frame[29];
+							current_communication.dst_ip[0] = frame[30];
+							current_communication.dst_ip[1] = frame[31];
+							current_communication.dst_ip[2] = frame[32];
+							current_communication.dst_ip[3] = frame[33];
+							current_communication.src_port = curr_src_port;
+							current_communication.dst_port = curr_dst_port;
+							current_communication.frames_count = 1;
+							current_communication.start_pre_verified = false;
+							current_communication.start_verified = false;
+							current_communication.end_init = false;
+							current_communication.end_pre_verified = false;
+							current_communication.end_verified = false;
+							current_communication.reversed_end = false;
+							current_communication.start_frame_id = frame_id;
+							current_communication.end_frame_id = frame_id;
+							if (!found) comm_list.Add(current_communication);
+							else comm_list.SetAt(c_index,current_communication);
+						}
+
+						/* ak SYN=1 a ACK=1 */
+						if (IsSYNandACK(frame[flags_i]) && (found == 2)) comm_list[c_index].start_pre_verified = true;
+
+						/* ak SYN=0, FIN=0 a ACK=1 */
+						if (IsACK(frame[flags_i]))
+							if (found == 1) {
+								if ((comm_list[c_index].end_pre_verified) && (!comm_list[c_index].reversed_end)) {
+									comm_list[c_index].end_verified = true;
+									comm_list[c_index].end_frame_id = frame_id;
+								}
+								else if (comm_list[c_index].start_pre_verified) comm_list[c_index].start_verified = true;
+							}
+							else if ((found == 2) && (comm_list[c_index].end_pre_verified) && (comm_list[c_index].reversed_end)) {
+								comm_list[c_index].end_verified = true;
+								comm_list[c_index].end_frame_id = frame_id;
+							}
+
+						/* ak FIN=1 a ACK=1 */
+						if (IsFINandACK(frame[flags_i]))
+							if (found == 1) {
+								if (!comm_list[c_index].end_init) comm_list[c_index].end_init = true;
+								else if (comm_list[c_index].reversed_end) comm_list[c_index].end_pre_verified = true;
+							}
+							else if (found == 2) {
+								if (!comm_list[c_index].end_init) {
+									comm_list[c_index].end_init = true;
+									comm_list[c_index].reversed_end = true;
+								}
+								else if (!comm_list[c_index].reversed_end) comm_list[c_index].end_pre_verified = true;
+							}
+
+						/* ak RST=1 */
+						if ((HaveRST(frame[flags_i])) && (found)) {
+								comm_list[c_index].end_verified = true;
+								comm_list[c_index].end_frame_id = frame_id;
+						}
 					}
 				}
-			}
-			if (analyzed_seg_type == UDP) {
+				theApp.ReOpenPCAPfile();
+				frame_id = 0;
 				
+				complete_c_id = -1;
+				uncomplete_c_id = -1;
+				for (i=0;i < comm_list.GetCount();i++) {
+					if ((complete_c_id == -1) && (comm_list[i].start_verified) && (comm_list[i].end_verified)) complete_c_id = i;
+					else if ((comm_list[i].start_verified) && (!comm_list[i].end_verified)) uncomplete_c_id = i;
+					if ((complete_c_id != -1) && (uncomplete_c_id != -1)) break;
+				}
+
+				// ak obsahuje aspon jednu kompletnu komunikaciu
+				if (complete_c_id != -1)
+				{
+					print.Format(_T("Komunikácia kompletná\r\n"));
+					if (comm_list[complete_c_id].dst_port == analyzed_port)
+						print.AppendFormat(_T("Klient: %d.%d.%d.%d:%d  Server: %d.%d.%d.%d:%s (%d)"),
+							comm_list[complete_c_id].src_ip[0],comm_list[complete_c_id].src_ip[1],
+							comm_list[complete_c_id].src_ip[2],comm_list[complete_c_id].src_ip[3],comm_list[complete_c_id].src_port,
+							comm_list[complete_c_id].dst_ip[0],comm_list[complete_c_id].dst_ip[1],
+							comm_list[complete_c_id].dst_ip[2],comm_list[complete_c_id].dst_ip[3],CString(type[prot]),comm_list[complete_c_id].dst_port);
+					else print.AppendFormat(_T("Klient: %d.%d.%d.%d:%d  Server: %d.%d.%d.%d:%s (%d)"),
+							comm_list[complete_c_id].dst_ip[0],comm_list[complete_c_id].dst_ip[1],
+							comm_list[complete_c_id].dst_ip[2],comm_list[complete_c_id].dst_ip[3],comm_list[complete_c_id].dst_port,
+							comm_list[complete_c_id].src_ip[0],comm_list[complete_c_id].src_ip[1],
+							comm_list[complete_c_id].src_ip[2],comm_list[complete_c_id].src_ip[3],CString(type[prot]),comm_list[complete_c_id].src_port);
+					pDlg->PrintToOutput(print);
+					c_index = 0;
+					while ((frame = pcap_next(handle,&pcap_header)) != NULL)
+					{
+						frame_id++;
+						if ((frame_id >= comm_list[complete_c_id].start_frame_id)
+							&& ((theApp.CmpCommWithFrame(comm_list[complete_c_id],frame)) || (theApp.CmpCommWithFrame(comm_list[complete_c_id],frame,true)))) {
+							c_index++;
+
+							if ((c_index <= 10) || ((comm_list[complete_c_id].frames_count - c_index + 1) <= 10)) {
+								
+								/* statistika ramcov */
+								found = 0;
+								for (i=0;i < lengths_list.GetCount();i++)
+									if (pcap_header.len <= lengths_list[i].to) {
+										lengths_list[i].count++;
+										found = 1;
+										break;
+									}
+								if (!found) {
+									do {
+										if (lengths_list.GetCount() == 0) fcount.from = 0;
+										else fcount.from = lengths_list[lengths_list.GetCount() - 1].to + 1;
+										if (fcount.from == 0) fcount.to = 19;
+										else fcount.to = 2 * fcount.from - 1;
+										fcount.count = 0;
+										lengths_list.Add(fcount);
+									} while (pcap_header.len > fcount.to);
+									lengths_list[lengths_list.GetCount() - 1].count++;
+								}
+																
+								/* rámec ID */
+								print.Format(_T("\r\nrámec %d\r\n"),frame_id);
+
+								/* vypis ramca */
+								theApp.PrintFrame(frame,&print,true);
+																
+								if ((comm_list[complete_c_id].frames_count > 20) && (c_index == 10)) print.AppendFormat(_T("\r\n\r\n............"));
+
+								pDlg->PrintToOutput(print);
+							}
+						}
+						if (frame_id == comm_list[complete_c_id].end_frame_id) break;
+					}
+					print.Format(_T("\r\nŠtatistika dåžky rámcov v bajtoch:"));
+					for (i=0;i < lengths_list.GetCount();i++) {
+						if (lengths_list[i].from < 80) print.AppendFormat(_T("\r\n%d - %d\t\t%d"),lengths_list[i].from,lengths_list[i].to,lengths_list[i].count);
+						else print.AppendFormat(_T("\r\n%d - %d\t%d"),lengths_list[i].from,lengths_list[i].to,lengths_list[i].count);
+					}
+					if (uncomplete_c_id != -1) print.AppendFormat(_T("\r\n\r\n"));
+					pDlg->PrintToOutput(print);
+					lengths_list.RemoveAll();
+				}
+
+				// ak obsahuje aspon jednu nekompletnu komunikaciu
+				if (uncomplete_c_id != -1)
+				{
+					theApp.ReOpenPCAPfile();
+					frame_id = 0;
+					print.Format(_T("Komunikácia nekompletná\r\n"));
+					if (comm_list[uncomplete_c_id].dst_port == analyzed_port)
+						print.AppendFormat(_T("Klient: %d.%d.%d.%d:%d  Server: %d.%d.%d.%d:%s (%d)"),
+							comm_list[uncomplete_c_id].src_ip[0],comm_list[uncomplete_c_id].src_ip[1],
+							comm_list[uncomplete_c_id].src_ip[2],comm_list[uncomplete_c_id].src_ip[3],comm_list[uncomplete_c_id].src_port,
+							comm_list[uncomplete_c_id].dst_ip[0],comm_list[uncomplete_c_id].dst_ip[1],
+							comm_list[uncomplete_c_id].dst_ip[2],comm_list[uncomplete_c_id].dst_ip[3],CString(type[prot]),comm_list[uncomplete_c_id].dst_port);
+					else print.AppendFormat(_T("Klient: %d.%d.%d.%d:%d  Server: %d.%d.%d.%d:%s (%d)"),
+							comm_list[uncomplete_c_id].dst_ip[0],comm_list[uncomplete_c_id].dst_ip[1],
+							comm_list[uncomplete_c_id].dst_ip[2],comm_list[uncomplete_c_id].dst_ip[3],comm_list[uncomplete_c_id].dst_port,
+							comm_list[uncomplete_c_id].src_ip[0],comm_list[uncomplete_c_id].src_ip[1],
+							comm_list[uncomplete_c_id].src_ip[2],comm_list[uncomplete_c_id].src_ip[3],CString(type[prot]),comm_list[uncomplete_c_id].src_port);
+					pDlg->PrintToOutput(print);
+					c_index = 0;
+					while ((frame = pcap_next(handle,&pcap_header)) != NULL)
+					{
+						frame_id++;
+						if ((frame_id >= comm_list[uncomplete_c_id].start_frame_id)
+							&& ((theApp.CmpCommWithFrame(comm_list[uncomplete_c_id],frame)) || (theApp.CmpCommWithFrame(comm_list[uncomplete_c_id],frame,true)))) {
+							c_index++;
+
+							if ((c_index <= 10) || ((comm_list[uncomplete_c_id].frames_count - c_index + 1) <= 10)) {
+								/* rámec ID */
+								print.Format(_T("\r\nrámec %d\r\n"),frame_id);
+
+								/* vypis ramca */
+								theApp.PrintFrame(frame,&print,true);
+																
+								if ((comm_list[uncomplete_c_id].frames_count > 20) && (c_index == 10)) print.AppendFormat(_T("\r\n\r\n............"));
+
+								pDlg->PrintToOutput(print);
+							}
+						}
+						if (frame_id == comm_list[uncomplete_c_id].end_frame_id) break;
+					}
+				}
+				theApp.ReOpenPCAPfile();
+				frame_id = 0;
+				comm_list.RemoveAll();
+			}
+			
+			// pre komunikacie bez spojenim
+			if (analyzed_seg_type == UDP) {
+				while ((frame = pcap_next(handle,&pcap_header)) != NULL)
+				{
+					frame_id++;
+					// ak ide o IPv4
+					if ((frame[12] == GetUpperByte(IP_prot_code)) && (frame[13] == GetLowerByte(IP_prot_code)) && ((frame[14] & 0xF0) == 0x40)) {
+						IP_header_length = (frame[14] & 0x0F) * 4;
+						curr_src_port = MergeBytes(frame[ETH2_HDR_LEN+IP_header_length],frame[ETH2_HDR_LEN+IP_header_length+1]);
+						curr_dst_port = MergeBytes(frame[ETH2_HDR_LEN+IP_header_length+2],frame[ETH2_HDR_LEN+IP_header_length+3]);
+						found = 0;
+
+						for (i=0;i < comm_list.GetCount();i++)
+							if (((comm_list[i].src_ip[0] == frame[26]) && (comm_list[i].src_ip[1] == frame[27]) && (comm_list[i].src_ip[2] == frame[28]) && (comm_list[i].src_ip[3] == frame[29])
+								&& (comm_list[i].dst_ip[0] == frame[30]) && (comm_list[i].dst_ip[1] == frame[31]) && (comm_list[i].dst_ip[2] == frame[32]) && (comm_list[i].dst_ip[3] == frame[33])
+								&& (comm_list[i].src_port == curr_src_port))
+								|| ((comm_list[i].dst_ip[0] == frame[26]) && (comm_list[i].dst_ip[1] == frame[27]) && (comm_list[i].dst_ip[2] == frame[28]) && (comm_list[i].dst_ip[3] == frame[29])
+								&& (comm_list[i].src_ip[0] == frame[30]) && (comm_list[i].src_ip[1] == frame[31]) && (comm_list[i].src_ip[2] == frame[32]) && (comm_list[i].src_ip[3] == frame[33])
+								&& (comm_list[i].src_port == curr_dst_port)))
+							{
+								found = 1;	
+								comm_list[i].frames_count++;
+								comm_list[i].end_frame_id = frame_id;
+								break;
+							}
+						
+						if ((!found) && (curr_dst_port == analyzed_port))
+						{
+							current_communication.src_ip[0] = frame[26];
+							current_communication.src_ip[1] = frame[27];
+							current_communication.src_ip[2] = frame[28];
+							current_communication.src_ip[3] = frame[29];
+							current_communication.dst_ip[0] = frame[30];
+							current_communication.dst_ip[1] = frame[31];
+							current_communication.dst_ip[2] = frame[32];
+							current_communication.dst_ip[3] = frame[33];
+							current_communication.src_port = curr_src_port;
+							current_communication.dst_port = curr_dst_port;
+							current_communication.frames_count = 1;
+							current_communication.start_frame_id = frame_id;
+							current_communication.end_frame_id = frame_id;
+						}
+					}
+				}
+				theApp.ReOpenPCAPfile();
+				frame_id = 0;
+				//...
+				theApp.ReOpenPCAPfile();
+				frame_id = 0;
+				comm_list.RemoveAll();
 			}
 		}
 		theApp.ReOpenPCAPfile();
-		if ((run_all) && (prot < 9)) prot++;
+		if ((run_all) && (prot < 9)) {
+			prot++;
+			if (!print.IsEmpty()) pDlg->PrintToOutput(_T("\r\n---------------------------------------------------------------\r\n"));
+		}
 		else break;
 	}
 	pDlg->PrintToOutput(_T("end_output"));
@@ -434,4 +633,143 @@ void CAnalyzatorApp::ReOpenPCAPfile(void)
 {
 	if (handle) pcap_close(handle);
 	handle = pcap_open_offline(FilePath,pcap_errbuf);
+}
+
+
+bool CAnalyzatorApp::IsACK(byte b)
+{
+	if (b == 0x10) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::HaveACK(byte b)
+{
+	if (b & 0x10) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::HaveRST(byte b)
+{
+	if (b & 0x4) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::IsSYN(byte b)
+{
+	if (b == 0x2) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::HaveSYN(byte b)
+{
+	if (b & 0x2) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::IsFIN(byte b)
+{
+	if (b == 0x1) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::HaveFIN(byte b)
+{
+	if (b & 0x1) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::IsSYNandACK(byte b)
+{
+	if (b == 0x12) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::IsFINandACK(byte b)
+{
+	if (b == 0x11) return true;
+	else return false;
+}
+
+
+bool CAnalyzatorApp::CmpCommWithFrame(COMMUNICATION comm, const u_char *frame, bool reverse)
+{
+	int IP_header_length = (frame[14] & 0x0F) * 4;
+	unsigned curr_src_port = MergeBytes(frame[ETH2_HDR_LEN+IP_header_length],frame[ETH2_HDR_LEN+IP_header_length+1]);
+	unsigned curr_dst_port = MergeBytes(frame[ETH2_HDR_LEN+IP_header_length+2],frame[ETH2_HDR_LEN+IP_header_length+3]);
+	
+	if (!reverse)
+	{
+		if ((comm.src_ip[0] == frame[26]) && (comm.src_ip[1] == frame[27]) && (comm.src_ip[2] == frame[28]) && (comm.src_ip[3] == frame[29])
+			&& (comm.dst_ip[0] == frame[30]) && (comm.dst_ip[1] == frame[31]) && (comm.dst_ip[2] == frame[32]) && (comm.dst_ip[3] == frame[33])
+			&& (comm.src_port == curr_src_port) && (comm.dst_port == curr_dst_port)) return true;  // ak ramec obsahuje rovnaku komunikaciu
+		// ak v ramci je ina komunukacia
+		else return false;
+	}
+	
+	if (reverse)
+	{
+		if ((comm.dst_ip[0] == frame[26]) && (comm.dst_ip[1] == frame[27]) && (comm.dst_ip[2] == frame[28]) && (comm.dst_ip[3] == frame[29])
+			&& (comm.src_ip[0] == frame[30]) && (comm.src_ip[1] == frame[31]) && (comm.src_ip[2] == frame[32]) && (comm.src_ip[3] == frame[33])
+			&& (comm.dst_port == curr_src_port) && (comm.src_port == curr_dst_port)) return true;  // ak ramec obsahuje rovnaku komunikaciu
+		// ak v ramci je ina komunukacia
+		else return false;
+	}
+}
+
+
+void CAnalyzatorApp::PrintFrame(const u_char *frame, CString *print, bool print_flags)
+{
+	int length_on_wire, i;
+	int IP_header_length = (frame[14] & 0x0F) * 4;
+	int flags_i = ETH2_HDR_LEN+IP_header_length+13;
+	
+	/* dåžka rámca poskytnutá paketovým drajverom */
+	print->AppendFormat(_T("dåžka rámca poskytnutá paketovým drajverom – %d B\r\n"),pcap_header.len);
+	
+	/* dåžka rámca prenášaného po médiu */
+	length_on_wire = pcap_header.len + 4;
+	if (length_on_wire < 64) length_on_wire = 64;
+	print->AppendFormat(_T("dåžka rámca prenášaného po médiu – %d B\r\n"),length_on_wire);
+	
+	/* typ ramca */
+	if (frame[12] >= 0x06) print->AppendFormat(_T("Ethernet II\r\n"));
+	else if ((frame[14] == 0xFF) && (frame[15] == 0xFF)) print->AppendFormat(_T("IEEE 802.3 - RAW\r\n"));
+	else if ((frame[14] == 0xAA) && (frame[15] == 0xAA) && (frame[16] == 0x03)) print->AppendFormat(_T("IEEE 802.3 - LLC - SNAP\r\n"));
+	else print->AppendFormat(_T("IEEE 802.3 - LLC\r\n"));
+
+	/* zdrojová MAC adresa */
+	print->AppendFormat(_T("Zdrojová MAC adresa: "));
+	for (i=6;i < 12;i++) print->AppendFormat(_T("%.2X "),frame[i]);
+	print->Delete(print->GetLength()-1);
+	
+	/* cie¾ová MAC adresa */
+	print->AppendFormat(_T("\r\nCie¾ová MAC adresa: "));
+	for (i=0;i < 6;i++) print->AppendFormat(_T("%.2X "),frame[i]);
+	print->Delete(print->GetLength()-1);
+	
+	/* vypis priznakov */
+	if (print_flags) {
+		print->AppendFormat(_T("\r\nPriznaky:"));
+		if (HaveSYN(frame[flags_i])) print->AppendFormat(_T(" SYN"));
+		if (HaveFIN(frame[flags_i])) print->AppendFormat(_T(" FIN"));
+		if (HaveRST(frame[flags_i])) print->AppendFormat(_T(" RST"));
+		if (HaveACK(frame[flags_i])) print->AppendFormat(_T(" ACK"));
+	}
+	
+	/* vypis bajtov ramca */
+	print->AppendFormat(_T("\r\n"));
+	for (i=0;i < pcap_header.len;i++) {
+		print->AppendFormat(_T("%.2X"),frame[i]);
+		if (!((i+1) % 8) && ((i+1) % 16) && ((i+1) != pcap_header.len)) print->AppendFormat(_T("   "));
+		else if (!((i+1) % 16) && ((i+1) != pcap_header.len)) print->AppendFormat(_T("\r\n"));
+		else if ((i+1) != pcap_header.len) print->AppendChar(' ');
+	}
 }
