@@ -37,6 +37,12 @@ typedef struct thread_param {
 		CDialog *pDlg;
 	} THREAD_PARAM;
 
+typedef struct arp {
+	byte ip1[4], ip2[4];
+	unsigned req_frame_id, rep_frame_id;
+	bool reply_received;
+} ARP;
+
 typedef enum {TCP, UDP} IP_PROT_TYPE;
 
 // CAnalyzatorApp:
@@ -66,6 +72,8 @@ public:
 	static bool IsSYNandACK(byte b);
 	static bool IsFINandACK(byte b);
 	bool CmpCommWithFrame(COMMUNICATION comm, const u_char *frame, bool reverse = false);
+	bool CmpUDPCommWithFrame(COMMUNICATION comm, const u_char *frame);
+	bool CmpARPCommWithFrame(ARP arp_comm, const u_char *frame, bool IsReply = false);
 	void PrintFrame(const u_char *frame, CString *print, bool print_flags = false);
 
 // Implementation
