@@ -141,8 +141,8 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 	CString print;
 	while ((frame = pcap_next(handle,&pcap_header)) != NULL)    // pre kazdy ramec
 	{
-		/* rámec ID */
-		print.Format(_T("rámec %d\r\n"),++frame_id);
+		/* ramec ID */
+		print.Format(_T("ramec %d\r\n"),++frame_id);
 		
 		/* vypis ramca */
 		theApp.PrintFrame(frame,&print);
@@ -152,7 +152,7 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 		
 		pDlg->PrintToOutput(print);
 
-		/* dåžka rámca prenášaného po médiu */
+		/* dlzka ramca prenasaneho po mediu */
 		length_on_wire = pcap_header.len + 4;
 		if (length_on_wire < 64) length_on_wire = 64;
 		
@@ -175,7 +175,7 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 			}
 		}
 	}
-	print.Format(_T("IP adresy vysielajúcich uzlov:\r\n"));
+	print.Format(_T("IP adresy vysielajucich uzlov:\r\n"));
 	for (i=0;i < ip.GetCount();i++) {
 		print.AppendFormat(_T("%d.%d.%d.%d\r\n"),ip[i].ip1,ip[i].ip2,ip[i].ip3,ip[i].ip4);
 		if (max_bytes_sent < ip[i].sent) {
@@ -183,7 +183,7 @@ UINT CAnalyzatorApp::AnalyzeFrames(void *pParam)
 			ip_index = i;
 		}
 	}
-	print.AppendFormat(_T("\r\nAdresa uzla s najväèším poètom odvysielaných bajtov:\r\n"));
+	print.AppendFormat(_T("\r\nAdresa uzla s najvacsim poctom odvysielanych bajtov:\r\n"));
 	print.AppendFormat(_T("%d.%d.%d.%d    %u bajtov"),ip[ip_index].ip1,ip[ip_index].ip2,ip[ip_index].ip3,ip[ip_index].ip4,max_bytes_sent);
 	pDlg->PrintToOutput(print);
 	ip.RemoveAll();
@@ -200,7 +200,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 	int prot = parameters->protocol;
 
 	char type[][15] = {"all", "http", "https", "telnet", "ssh", "ftp-control", "ftp-data", "tftp", "icmp", "arp"};
-	bool run_all = FALSE;
+	bool run_all = false;
 	const u_char *frame;
 	int c_index, complete_c_id, uncomplete_c_id, i;
 	unsigned IP_prot_code = theApp.GetEth2ProtocolNum("IP");
@@ -221,7 +221,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 
 	// ak budu analyzovane vsetky typy komunikacii
 	if (prot == 0) {
-		run_all = TRUE;
+		run_all = true;
 		prot = 1;
 	}
 	
@@ -248,7 +248,9 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 						if ((curr_src_port != analyzed_port) && (curr_dst_port != analyzed_port)) continue;
 						found = 0;
 
+						// vyhladanie v zozname
 						for (i=0;i < comm_list.GetCount();i++)
+							// ak sa tam nachadza
 							if (theApp.CmpCommWithFrame(comm_list[i],frame)) {
 								found = 1;
 								c_index = i;
@@ -258,6 +260,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 								}
 								break;
 							}
+							// ak sa tam nachadza s opacnymi adresami
 							else if (theApp.CmpCommWithFrame(comm_list[i],frame,true)) {
 								found = 2;
 								c_index = i;
@@ -334,6 +337,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 				theApp.ReOpenPCAPfile();
 				frame_id = 0;
 				
+				// najdenie prvu kompletnu a prvu nekompletnu komunikaciu
 				complete_c_id = -1;
 				uncomplete_c_id = -1;
 				for (i=0;i < comm_list.GetCount();i++) {
@@ -345,7 +349,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 				// ak obsahuje aspon jednu kompletnu komunikaciu
 				if (complete_c_id != -1)
 				{
-					print.Format(_T("Komunikácia kompletná\r\n"));
+					print.Format(_T("Komunikacia kompletna\r\n"));
 					if (comm_list[complete_c_id].dst_port == analyzed_port)
 						print.AppendFormat(_T("Klient: %d.%d.%d.%d:%d  Server: %d.%d.%d.%d:%s (%d)"),
 							comm_list[complete_c_id].src_ip[0],comm_list[complete_c_id].src_ip[1],
@@ -362,15 +366,30 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 					while ((frame = pcap_next(handle,&pcap_header)) != NULL)
 					{
 						frame_id++;
-						if ((frame_id >= comm_list[complete_c_id].start_frame_id)
-							&& ((theApp.CmpCommWithFrame(comm_list[complete_c_id],frame)) || (theApp.CmpCommWithFrame(comm_list[complete_c_id],frame,true)))) {
-							c_index++;
+						// ak ide o IPv4 s TCP
+						if ((frame[12] == GetUpperByte(IP_prot_code)) && (frame[13] == GetLowerByte(IP_prot_code))
+							&& ((frame[14] & 0xF0) == 0x40) && (frame[23] == theApp.GetIPProtocolNum("TCP")))
+						{
+							if ((frame_id >= comm_list[complete_c_id].start_frame_id)
+								&& ((theApp.CmpCommWithFrame(comm_list[complete_c_id], frame)) || (theApp.CmpCommWithFrame(comm_list[complete_c_id], frame, true)))) {
+								c_index++;
 
-							if ((c_index <= 10) || ((comm_list[complete_c_id].frames_count - c_index + 1) <= 10)) {
-								
+								if ((c_index <= 10) || ((comm_list[complete_c_id].frames_count - c_index + 1) <= 10)) {
+																		
+									/* ramec ID */
+									print.Format(_T("\r\nramec %d\r\n"), frame_id);
+
+									/* vypis ramca */
+									theApp.PrintFrame(frame, &print, true);
+
+									if ((comm_list[complete_c_id].frames_count > 20) && (c_index == 10)) print.AppendFormat(_T("\r\n\r\n............"));
+
+									pDlg->PrintToOutput(print);
+								}
+
 								/* statistika ramcov */
 								found = 0;
-								for (i=0;i < lengths_list.GetCount();i++)
+								for (i = 0; i < lengths_list.GetCount(); i++)
 									if (pcap_header.len <= lengths_list[i].to) {
 										lengths_list[i].count++;
 										found = 1;
@@ -387,21 +406,12 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 									} while (pcap_header.len > fcount.to);
 									lengths_list[lengths_list.GetCount() - 1].count++;
 								}
-																
-								/* rámec ID */
-								print.Format(_T("\r\nrámec %d\r\n"),frame_id);
-
-								/* vypis ramca */
-								theApp.PrintFrame(frame,&print,true);
-																
-								if ((comm_list[complete_c_id].frames_count > 20) && (c_index == 10)) print.AppendFormat(_T("\r\n\r\n............"));
-
-								pDlg->PrintToOutput(print);
 							}
 						}
 						if (frame_id == comm_list[complete_c_id].end_frame_id) break;
 					}
-					print.Format(_T("\r\nŠtatistika dåžky rámcov v bajtoch:"));
+					// vypis statistiky ramcov
+					print.Format(_T("\r\nStatistika dlzky ramcov v bajtoch:"));
 					for (i=0;i < lengths_list.GetCount();i++) {
 						if (lengths_list[i].from < 80) print.AppendFormat(_T("\r\n%d - %d\t\t%d"),lengths_list[i].from,lengths_list[i].to,lengths_list[i].count);
 						else print.AppendFormat(_T("\r\n%d - %d\t%d"),lengths_list[i].from,lengths_list[i].to,lengths_list[i].count);
@@ -416,7 +426,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 				{
 					theApp.ReOpenPCAPfile();
 					frame_id = 0;
-					print.Format(_T("Komunikácia nekompletná\r\n"));
+					print.Format(_T("Komunikacia nekompletna\r\n"));
 					if (comm_list[uncomplete_c_id].dst_port == analyzed_port)
 						print.AppendFormat(_T("Klient: %d.%d.%d.%d:%d  Server: %d.%d.%d.%d:%s (%d)"),
 							comm_list[uncomplete_c_id].src_ip[0],comm_list[uncomplete_c_id].src_ip[1],
@@ -433,20 +443,25 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 					while ((frame = pcap_next(handle,&pcap_header)) != NULL)
 					{
 						frame_id++;
-						if ((frame_id >= comm_list[uncomplete_c_id].start_frame_id)
-							&& ((theApp.CmpCommWithFrame(comm_list[uncomplete_c_id],frame)) || (theApp.CmpCommWithFrame(comm_list[uncomplete_c_id],frame,true)))) {
-							c_index++;
+						// ak ide o IPv4 s TCP
+						if ((frame[12] == GetUpperByte(IP_prot_code)) && (frame[13] == GetLowerByte(IP_prot_code))
+							&& ((frame[14] & 0xF0) == 0x40) && (frame[23] == theApp.GetIPProtocolNum("TCP")))
+						{
+							if ((frame_id >= comm_list[uncomplete_c_id].start_frame_id)
+								&& ((theApp.CmpCommWithFrame(comm_list[uncomplete_c_id], frame)) || (theApp.CmpCommWithFrame(comm_list[uncomplete_c_id], frame, true)))) {
+								c_index++;
 
-							if ((c_index <= 10) || ((comm_list[uncomplete_c_id].frames_count - c_index + 1) <= 10)) {
-								/* rámec ID */
-								print.Format(_T("\r\nrámec %d\r\n"),frame_id);
+								if ((c_index <= 10) || ((comm_list[uncomplete_c_id].frames_count - c_index + 1) <= 10)) {
+									/* ramec ID */
+									print.Format(_T("\r\nramec %d\r\n"), frame_id);
 
-								/* vypis ramca */
-								theApp.PrintFrame(frame,&print,true);
-																
-								if ((comm_list[uncomplete_c_id].frames_count > 20) && (c_index == 10)) print.AppendFormat(_T("\r\n\r\n............"));
+									/* vypis ramca */
+									theApp.PrintFrame(frame, &print, true);
 
-								pDlg->PrintToOutput(print);
+									if ((comm_list[uncomplete_c_id].frames_count > 20) && (c_index == 10)) print.AppendFormat(_T("\r\n\r\n............"));
+
+									pDlg->PrintToOutput(print);
+								}
 							}
 						}
 						if (frame_id == comm_list[uncomplete_c_id].end_frame_id) break;
@@ -506,7 +521,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 						theApp.ReOpenPCAPfile();
 						frame_id = 0;
 					}
-					print.Format(_T("Komunikácia bez spojenim\r\n"));
+					print.Format(_T("Komunikacia bez spojenim\r\n"));
 					print.AppendFormat(_T("Klient: %d.%d.%d.%d:%d  Server: %d.%d.%d.%d:%s (%d)"),
 						comm_list[i].src_ip[0], comm_list[i].src_ip[1], comm_list[i].src_ip[2], comm_list[i].src_ip[3], comm_list[i].src_port,
 						comm_list[i].dst_ip[0], comm_list[i].dst_ip[1], comm_list[i].dst_ip[2], comm_list[i].dst_ip[3], CString(type[prot]), comm_list[i].dst_port);
@@ -514,18 +529,23 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 					c_index = 0;
 					while ((frame = pcap_next(handle, &pcap_header)) != NULL) {
 						frame_id++;
-						if ((frame_id >= comm_list[i].start_frame_id) && (theApp.CmpUDPCommWithFrame(comm_list[i],frame))) {
-							c_index++;
-							if ((c_index <= 10) || ((comm_list[i].frames_count - c_index + 1) <= 10)) {
-								/* rámec ID */
-								print.Format(_T("\r\nrámec %d\r\n"), frame_id);
+						// ak ide o IPv4 s UDP
+						if ((frame[12] == GetUpperByte(IP_prot_code)) && (frame[13] == GetLowerByte(IP_prot_code))
+							&& ((frame[14] & 0xF0) == 0x40) && (frame[23] == theApp.GetIPProtocolNum("UDP")))
+						{
+							if ((frame_id >= comm_list[i].start_frame_id) && (theApp.CmpUDPCommWithFrame(comm_list[i], frame))) {
+								c_index++;
+								if ((c_index <= 10) || ((comm_list[i].frames_count - c_index + 1) <= 10)) {
+									/* ramec ID */
+									print.Format(_T("\r\nramec %d\r\n"), frame_id);
 
-								/* vypis ramca */
-								theApp.PrintFrame(frame, &print);
+									/* vypis ramca */
+									theApp.PrintFrame(frame, &print);
 
-								if ((comm_list[i].frames_count > 20) && (c_index == 10)) print.AppendFormat(_T("\r\n\r\n............"));
+									if ((comm_list[i].frames_count > 20) && (c_index == 10)) print.AppendFormat(_T("\r\n\r\n............"));
 
-								pDlg->PrintToOutput(print);
+									pDlg->PrintToOutput(print);
+								}
 							}
 						}
 						if (frame_id == comm_list[i].end_frame_id) break;
@@ -626,6 +646,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 			frame_id = 0;
 			// vypis ARP dvojic
 			c_index = 0;
+			found = 0;
 			for (i = 0; i < arp_list.GetCount(); i++)
 				if (arp_list[i].reply_received)
 				{
@@ -634,20 +655,57 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 						frame_id = 0;
 					}
 					c_index++;
+					if (found) pDlg->PrintToOutput(_T("\r\n\r\n+++++++++++++++++++++++++++++++++++++++++++++++++++++\r\n\r\n"));
+					found = 1;
 					while ((frame = pcap_next(handle, &pcap_header)) != NULL)
 					{
 						frame_id++;
-						// ak je to Request
-						if ((frame_id >= arp_list[i].req_frame_id) && (MergeBytes(frame[20],frame[21]) == 1))
+						// ak ide o ARP s hw type Ethernet (size 6B) a prot. type IP (size 4B)
+						if ((frame[12] == GetUpperByte(ARP_prot_code)) && (frame[13] == GetLowerByte(ARP_prot_code))
+							&& (MergeBytes(frame[14], frame[15]) == 1) && (MergeBytes(frame[16], frame[17]) == IP_prot_code)
+							&& (frame[18] == 6) && (frame[19] == 4))
 						{
-							print.Format(_T("Komunikacia c. %d\r\n"),c_index);
+							// ak je to Request
+							if ((frame_id >= arp_list[i].req_frame_id) && (MergeBytes(frame[20], frame[21]) == 1))
+							{
+								/* vypis cisla komunikacie */
+								print.Format(_T("Komunikacia c. %d\r\n"), c_index);
 
-							pDlg->PrintToOutput(print);
-						}
-						// ak je to Reply
-						if (frame_id == arp_list[i].rep_frame_id)
-						{
-							break;
+								/* vypis udajov o ARP */
+								print.AppendFormat(_T("ARP-Request\r\nIP adresa: %d.%d.%d.%d,   MAC Adresa: ???\r\n"), frame[38], frame[39], frame[40], frame[41]);
+								print.AppendFormat(_T("Zdrojova IP: %d.%d.%d.%d,   Cielova IP: %d.%d.%d.%d\r\n"),
+									frame[28], frame[29], frame[30], frame[31], frame[38], frame[39], frame[40], frame[41]);
+
+								/* ramec ID */
+								print.AppendFormat(_T("ramec %d\r\n"), frame_id);
+
+								/* vypis ramca */
+								theApp.PrintFrame(frame, &print);
+								print.AppendFormat(_T("\r\n"));
+
+								pDlg->PrintToOutput(print);
+							}
+							// ak je to Reply
+							if (frame_id == arp_list[i].rep_frame_id)
+							{
+								/* vypis cisla komunikacie */
+								print.Format(_T("Komunikacia c. %d\r\n"), c_index);
+
+								/* vypis udajov o ARP */
+								print.AppendFormat(_T("ARP-Reply\r\nIP adresa: %d.%d.%d.%d,   MAC Adresa: %.2X %.2X %.2X %.2X %.2X %.2X\r\n"),
+									frame[28], frame[29], frame[30], frame[31], frame[22], frame[23], frame[24], frame[25], frame[26], frame[27]);
+								print.AppendFormat(_T("Zdrojova IP: %d.%d.%d.%d,   Cielova IP: %d.%d.%d.%d\r\n"),
+									frame[28], frame[29], frame[30], frame[31], frame[38], frame[39], frame[40], frame[41]);
+
+								/* ramec ID */
+								print.AppendFormat(_T("ramec %d\r\n"), frame_id);
+
+								/* vypis ramca */
+								theApp.PrintFrame(frame, &print);
+
+								pDlg->PrintToOutput(print);
+								break;
+							}
 						}
 					}
 				}
@@ -668,7 +726,7 @@ UINT CAnalyzatorApp::AnalyzeCommunication(void *pParam)
 
 CString CAnalyzatorApp::CheckProtocolFiles(void)
 {
-	CString error(_T("Chyba pri otváraní:"));
+	CString error(_T("Chyba pri otvarani:"));
 
 	if ((f_eth2) && (f_ip) && (f_ports) && (f_icmp)) return _T("");
 	if (!f_eth2) error.AppendFormat(_T("\r\nethernet2_protocols.txt"));
@@ -923,13 +981,13 @@ void CAnalyzatorApp::PrintFrame(const u_char *frame, CString *print, bool print_
 	int IP_header_length = (frame[14] & 0x0F) * 4;
 	int flags_i = ETH2_HDR_LEN+IP_header_length+13;
 	
-	/* dåžka rámca poskytnutá paketovým drajverom */
-	print->AppendFormat(_T("dåžka rámca poskytnutá paketovým drajverom – %d B\r\n"),pcap_header.len);
+	/* dlzka ramca poskytnuta paketovym drajverom */
+	print->AppendFormat(_T("dlzka ramca poskytnuta paketovym drajverom – %d B\r\n"),pcap_header.len);
 	
-	/* dåžka rámca prenášaného po médiu */
+	/* dlzka ramca prenasaneho po mediu */
 	length_on_wire = pcap_header.len + 4;
 	if (length_on_wire < 64) length_on_wire = 64;
-	print->AppendFormat(_T("dåžka rámca prenášaného po médiu – %d B\r\n"),length_on_wire);
+	print->AppendFormat(_T("dlzka ramca prenasaneho po mediu – %d B\r\n"),length_on_wire);
 	
 	/* typ ramca */
 	if (frame[12] >= 0x06) print->AppendFormat(_T("Ethernet II\r\n"));
@@ -937,13 +995,13 @@ void CAnalyzatorApp::PrintFrame(const u_char *frame, CString *print, bool print_
 	else if ((frame[14] == 0xAA) && (frame[15] == 0xAA) && (frame[16] == 0x03)) print->AppendFormat(_T("IEEE 802.3 - LLC - SNAP\r\n"));
 	else print->AppendFormat(_T("IEEE 802.3 - LLC\r\n"));
 
-	/* zdrojová MAC adresa */
-	print->AppendFormat(_T("Zdrojová MAC adresa: "));
+	/* zdrojova MAC adresa */
+	print->AppendFormat(_T("Zdrojova MAC adresa: "));
 	for (i=6;i < 12;i++) print->AppendFormat(_T("%.2X "),frame[i]);
 	print->Delete(print->GetLength()-1);
 	
-	/* cie¾ová MAC adresa */
-	print->AppendFormat(_T("\r\nCie¾ová MAC adresa: "));
+	/* cielova MAC adresa */
+	print->AppendFormat(_T("\r\nCielova MAC adresa: "));
 	for (i=0;i < 6;i++) print->AppendFormat(_T("%.2X "),frame[i]);
 	print->Delete(print->GetLength()-1);
 	
